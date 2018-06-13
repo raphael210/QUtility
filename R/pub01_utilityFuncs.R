@@ -699,30 +699,59 @@ WealthIndex <- function(rtn,geometric=TRUE){
 #' get the summary infomation of the rtn series,including Annualized Return,Annualized Std Dev,Annualized Sharpe,HitRatio,Worst Drawdown
 #' @param rtn an xts, vector, matrix, data frame, timeSeries or zoo object of asset returns
 #' @param hitFreq,indicating the interval when computing the hitRatio of rtn. An interval specification, one of "day", "week", "month", "quarter" and "year", optionally preceded by an integer and a space, or followed by "s".See \code{\link{cut.Date}} for detail.
-#' @param hitSatisfied a numeric, indicating how much return could be called a "hit".See \code{\link{hitRatio}} for detail.
 #' @param Rf risk free rate, in same period as your returns
-#' @return a matrix, giving the summary infomation of the rtn series,including Annualized Return,Annualized Std Dev,Annualized Sharpe,HitRatio,Worst Drawdown 
+#' @param freq NULL or an interval specification.
+#' @param formula a charactor string of formula. eg. "period+asset~var". only used when \code{rtn} is multi-asset and \code{freq} not null.
+#' @return a matrix if freq is null or rtn is single asset, else a dataframe.
 #' @author Ruifei.Yin
 #' @export
 #' @examples
-#' rtn.long <- zoo(rnorm(100,0.001,0.02),as.Date("2010-01-01")+1:100)
-#' rtn.short <- rtn.long + rnorm(100,-0.001,0.003)
+#' rtn.long <- zoo(rnorm(1000,0.001,0.02),as.Date("2010-01-01")+1:1000)
+#' rtn.short <- rtn.long + rnorm(1000,-0.001,0.003)
 #' rtn <- merge(rtn.long,rtn.short)
 #' rtn.summary(rtn)
-rtn.summary <- function(rtn,hitFreq="day",hitSatisfied=0,Rf=0){
-  rtn <- as.xts(rtn)   
-  annual <- as.matrix(Table.Annualized(rtn,Rf=Rf))
-  rtn.aggr <- aggregate(rtn,as.Date(cut(zoo::index(rtn),hitFreq)),PerformanceAnalytics::Return.cumulative)
-  hit <- hitRatio(rtn.aggr,satisfied=hitSatisfied)
-  dim(hit) <- c(1, NCOL(rtn))
-  colnames(hit) <- colnames(rtn)
-  rownames(hit) <- if(hitFreq=="day") "hit_ratio" else paste("hit_ratio (of ",hitFreq,")",sep="")
-  maxDD <- PerformanceAnalytics::maxDrawdown(rtn)
-  dim(maxDD) <- c(1, NCOL(rtn))
-  colnames(maxDD) <- colnames(rtn)
-  rownames(maxDD) <- "max_drawdown"
-  result <- rbind(annual,hit,maxDD) 
-  return(result)
+#' rtn.summary(rtn.long)
+#' rtn.summary(rtn.long,freq="year")
+#' rtn.summary(rtn,freq="year")
+#' rtn.summary(rtn,freq="year",formula="asset+period~var")
+#' rtn.summary(rtn,from=c("2010-02-03","2010-03-04"),to=c("2011-03-09","2011-03-30"))
+rtn.summary <- function(rtn,hitFreq="day",Rf=0,
+                        freq = NULL,from=NULL,to=NULL,
+                        formula="period+asset~var"){
+  rtn <- as.xts(rtn)  
+  if(is.null(freq)&is.null(from)&is.null(to)){
+    annual <- as.matrix(Table.Annualized(rtn,Rf=Rf))
+    rtn.aggr <- aggregate(rtn,as.Date(cut(zoo::index(rtn),hitFreq)),PerformanceAnalytics::Return.cumulative)
+    hit <- hitRatio(rtn.aggr)
+    dim(hit) <- c(1, NCOL(rtn))
+    colnames(hit) <- colnames(rtn)
+    rownames(hit) <- "hit_ratio"
+    maxDD <- PerformanceAnalytics::maxDrawdown(rtn)
+    dim(maxDD) <- c(1, NCOL(rtn))
+    colnames(maxDD) <- colnames(rtn)
+    rownames(maxDD) <- "max_drawdown"
+    result <- rbind(annual,hit,maxDD) 
+    return(result)
+  }else{
+    if(!is.null(freq)){
+      from <- unique(cut.Date2(zoo::index(rtn),freq,lab.side="begin"))
+      to <- unique(cut.Date2(zoo::index(rtn),freq,lab.side="end"))
+    }
+    periods <- paste(from,to,sep = "/")
+    re <- data.frame(stringsAsFactors = FALSE)
+    for(tt in periods){
+      re_ <- rtn.summary(rtn[tt,],hitFreq=hitFreq,freq = NULL,from=NULL,to=NULL)
+      re_ <- data.frame(period=tt,var=rownames(re_),re_)
+      re <- rbind(re,re_)
+    }
+    re <- reshape2::melt(re,id.vars=c("period","var"),variable.name="asset")
+    if(ncol(rtn)==1){
+      re <- reshape2::acast(re,period~var)
+    } else {
+      re <- reshape2::dcast(re,formula=formula)
+    }
+    return(re)
+  }
 }
 
 
@@ -749,6 +778,18 @@ rtn.stats <- function(rtn,hitSatisfied=0){
   hitRatio <- hitRatio(rtn,hitSatisfied)
   result <- rbind(hitRatio,result.PApkg)
   return(result)
+}
+
+#' rtn.drawdown_stats
+#' 
+#' @export
+rtn.drawdown_stats <- function(rtn,top=5){
+  rtn <- as.xts(rtn)
+  if(ncol(rtn)>1){
+    stop("rtn series must be single column!")
+  }
+  re <- PerformanceAnalytics::table.Drawdowns(rtn,top = top) 
+  return(re)
 }
 
 #' rtn.periods
@@ -1389,42 +1430,6 @@ melt.ts <- function(ts){
   return(ts.melt)
 }
 
-numericFormatRow <- function(df, percentRows = c(1:nrow(df))){  
-  for(i in 1:ncol(df)){
-    temp <- as.numeric(df[,i])
-    temp2 <- rep("",length(temp))
-    for(j in 1:length(temp2)){
-      temp2[j] <- formatC(temp[j], format = "f", digits = 2)
-    }
-    for(j in percentRows){
-      temp2[j] <- paste(formatC(100 * temp[j], format = "f", digits = 1), "%", sep = "")
-    }
-    df[,i] <- temp2    
-  }
-  return(df)
-}
-
-numericFormatCol <- function(df, percentCols = c(1:ncol(df))){  
-  for(i in 1:ncol(df)){
-    temp <- as.numeric(df[,i])
-    temp2 <- rep("",length(temp))
-    for(j in 1:length(temp2)){
-      temp2[j] <- formatC(temp[j], format = "f", digits = 2)
-    }
-    if(is.numeric(df[,i])){
-      df[,i] <- temp2
-    }    
-  }
-  for(i in percentCols){
-    temp <- as.numeric(df[,i])
-    temp2 <- rep("",length(temp))
-    for(j in 1:length(temp2)){
-      temp2[j] <- paste(formatC(100 * temp[j], format = "f", digits = 1), "%", sep = "")
-    }
-    df[,i] <- temp2
-  }
-  return(df)
-}
 
 
 
@@ -1875,64 +1880,6 @@ renameCol <- function (indata, src, tgt) {
   return(ans)
 }
 
-
-
-# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ==============
-# ===================== Event Driven Models               ==============
-# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ==============
-
-#' getEventRtn
-#' 
-#' Given a event data(ussually a TS object), calculate the extra returns driven by the event.
-#' @aliases getEventRtn getEventRtns
-#' @param TS a TS object.
-#' @param holdingday a integer, giving the holding day.
-#' @param bmk a character string,giving the stockID of the benchmark index,eg. "EI000300".
-#' @param fee a mumeric, giving the one side fee of trading.
-#' @param tradeType a character string("close","nextavg","nextopen"),indicating the trading type.See detail in \code{\link{getPeriodrtn}}
-#' @return getEventRtn return a data frame with cols:"stockID","date","endT","rtn","bmkRtn","exRtn".
-#' @export
-#' @author Ruifei.Yin
-#' @examples
-#' eventRtn <- getEventRtn(TS,20)
-getEventRtn <- function(TS,holdingday,bmk="EI000300",fee=0,tradeType=c("close","nextavg","nextopen")){
-  check.TS(TS)
-  endT <- trday.nearby(TS$date,by= holdingday)
-  if(holdingday>0){
-    rtn.event <- getPeriodrtn(stockID=TS$stockID,begT=TS$date,endT=endT,tradeType=tradeType)-fee*2
-    rtn.bmk <- getPeriodrtn(stockID=bmk,begT=TS$date,endT=endT,tradeType="close",datasrc='ts')
-  } else if(holdingday<0){
-    rtn.event <- getPeriodrtn(stockID=TS$stockID,begT=endT,endT=TS$date,tradeType=tradeType)-fee*2
-    rtn.bmk <- getPeriodrtn(stockID=bmk,begT=endT,endT=TS$date,tradeType="close",datasrc='ts')
-  } else {
-    rtn.event <- 0
-    rtn.bmk <- 0
-  }
-  rtn.ex <- rtn.event-rtn.bmk
-  re <- data.frame(TS,endT=endT,rtn=rtn.event,bmkRtn=rtn.bmk,exRtn=rtn.ex)
-  return(re)
-}
-#' @rdname getEventRtn
-#' @param holdingdays a vector of integers,giving the list of holding days
-#' @return getEventRtns return a data frame(with cols same as return of getEventRtn),which is a rbind of returns of getEventRtn by different holdingdays. 
-#' @examples
-#' eventRtns <- getEventRtns(head(TS,10),c(-10,-5,0,5,10))
-getEventRtns <- function(TS,holdingdays,bmk="EI000300",fee=0,tradeType=c("close","nextavg","nextopen")){  
-  for(i in 1:length(holdingdays)){
-    re.sub <- getEventRtn(TS=TS,holdingday=holdingdays[i],bmk=bmk,fee=fee,tradeType=tradeType)
-    re.sub$holdingday <- holdingdays[i]
-    if(i==1){
-      re <- re.sub
-    } else {      
-      re <- rbind(re,re.sub)
-    }     
-  }
-  return(re)
-}
-
-eventRtn.stats <- function(eventRtn){
-  
-}
 
 
 

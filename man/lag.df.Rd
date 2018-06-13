@@ -4,7 +4,7 @@
 \alias{lag.df}
 \title{lag.df}
 \usage{
-lag.df(df, k = 1, na.pad = FALSE)
+\method{lag}{df}(df, k = 1, na.pad = FALSE)
 }
 \arguments{
 \item{df}{a data frame object}

@@ -4,7 +4,7 @@
 \alias{lag.m}
 \title{lag.m}
 \usage{
-lag.m(m, k = 1, na.pad = FALSE)
+\method{lag}{m}(m, k = 1, na.pad = FALSE)
 }
 \arguments{
 \item{m}{a matrix or a vector}

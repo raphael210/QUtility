@@ -4,7 +4,7 @@
 \alias{melt.ts}
 \title{melt.ts}
 \usage{
-\method{melt}{ts}(ts)
+melt.ts(ts)
 }
 \arguments{
 \item{ts}{a zoo, timeSeries or xts object}

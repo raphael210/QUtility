@@ -4,28 +4,36 @@
 \alias{rtn.summary}
 \title{rtn.summary}
 \usage{
-rtn.summary(rtn, hitFreq = "day", hitSatisfied = 0, Rf = 0)
+rtn.summary(rtn, hitFreq = "day", Rf = 0, freq = NULL, from = NULL,
+  to = NULL, formula = "period+asset~var")
 }
 \arguments{
 \item{rtn}{an xts, vector, matrix, data frame, timeSeries or zoo object of asset returns}
 
 \item{hitFreq, indicating}{the interval when computing the hitRatio of rtn. An interval specification, one of "day", "week", "month", "quarter" and "year", optionally preceded by an integer and a space, or followed by "s".See \code{\link{cut.Date}} for detail.}
 
-\item{hitSatisfied}{a numeric, indicating how much return could be called a "hit".See \code{\link{hitRatio}} for detail.}
-
 \item{Rf}{risk free rate, in same period as your returns}
+
+\item{freq}{NULL or an interval specification.}
+
+\item{formula}{a charactor string of formula. eg. "period+asset~var". only used when \code{rtn} is multi-asset and \code{freq} not null.}
 }
 \value{
-a matrix, giving the summary infomation of the rtn series,including Annualized Return,Annualized Std Dev,Annualized Sharpe,HitRatio,Worst Drawdown
+a matrix if freq is null or rtn is single asset, else a dataframe.
 }
 \description{
 get the summary infomation of the rtn series,including Annualized Return,Annualized Std Dev,Annualized Sharpe,HitRatio,Worst Drawdown
 }
 \examples{
-rtn.long <- zoo(rnorm(100,0.001,0.02),as.Date("2010-01-01")+1:100)
-rtn.short <- rtn.long + rnorm(100,-0.001,0.003)
+rtn.long <- zoo(rnorm(1000,0.001,0.02),as.Date("2010-01-01")+1:1000)
+rtn.short <- rtn.long + rnorm(1000,-0.001,0.003)
 rtn <- merge(rtn.long,rtn.short)
 rtn.summary(rtn)
+rtn.summary(rtn.long)
+rtn.summary(rtn.long,freq="year")
+rtn.summary(rtn,freq="year")
+rtn.summary(rtn,freq="year",formula="asset+period~var")
+rtn.summary(rtn,from=c("2010-02-03","2010-03-04"),to=c("2011-03-09","2011-03-30"))
 }
 \author{
 Ruifei.Yin
