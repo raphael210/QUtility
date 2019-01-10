@@ -4,7 +4,8 @@
 \alias{ggplot.Drawdown}
 \title{ggplot.Drawdown}
 \usage{
-\method{ggplot}{Drawdown}(rtn, geometric = TRUE, main = NULL, ...)
+\method{ggplot}{Drawdown}(rtn, geometric = TRUE, main = NULL, alpha = if
+  (dim(rtn)[2] > 1) 0.5 else 1, ...)
 }
 \description{
 ggplot.Drawdown

@@ -47,7 +47,7 @@ is_usualcols <- function(cols){
 guess_factorNames <- function(df,no_factorname = NULL,is_factorname="factorscore",silence=FALSE){
   factorNames <- names(df)[!is_usualcols(names(df)) & !names(df)%in%no_factorname | names(df)%in%is_factorname]
   if(!silence){
-    cat(paste("The guessed factorNames are: ",paste(factorNames,collapse = ","),".\n",sep = ""))
+    message(paste0("The guessed factorNames are: ",paste(factorNames,collapse = ","),"."))
   }
   return(factorNames)
 }
@@ -1247,9 +1247,9 @@ ggplots.RollingPerformance <- function(rtn,width=250,by=30,...){
 
 #' ggplot.Drawdown
 #' @export ggplot.Drawdown
-ggplot.Drawdown <- function(rtn,geometric=TRUE,main=NULL,...){
+ggplot.Drawdown <- function(rtn,geometric=TRUE,main=NULL,alpha=if(dim(rtn)[2]>1) 0.5 else 1,...){
   dd <- PerformanceAnalytics:::Drawdowns(rtn,geometric=geometric)
-  ggplot.ts.area(dd,main=main,position="identity",...)+
+  ggplot.ts.area(dd,main=main,position="identity",alpha=alpha,...)+
     ylab("Drawdown")+
     scale_y_continuous(labels=scales::percent)
 }
@@ -1502,6 +1502,9 @@ read.clipboard <- function(header = TRUE, colClasses = NA, sep = "\t", ...) {
 write.clipboard <- function(x, row.names=FALSE, col.names=TRUE,...) {
   write.table(x,"clipboard-16384",sep="\t",row.names=row.names,col.names=col.names, ...)
 }
+
+
+
 
 
 #' vlookup
@@ -1819,6 +1822,7 @@ getBiCop <- function(n, rho, mar.fun=rnorm, x = NULL, drop.x=FALSE, ...) {
 
 
 #' Rename columns in a matrix or a dataframe.
+#' 
 #' @param indata  A dataframe or a matrix 
 #' @param src  Source: Vector of names of columns in 'indata' to be renamed. Can also be a vector of column numbers.
 #' @param tgt  Target: Vector with corresponding new names in the output.
@@ -1882,7 +1886,99 @@ renameCol <- function (indata, src, tgt) {
 
 
 
+#' xts2df
+#' 
+#' @export
+xts2df <- function(x) {
+  df <- data.frame(date=zoo::index(x),zoo::coredata(x))
+  return(df)
+} 
 
 
 
+
+# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ==============
+# ===================== Andrew's functions              =============
+# ===================== xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx ==============
+
+
+#' ggplot.rtn.periods
+#'
+#' \code{ggplot.rtn.periods} plot rtn.periods result.
+#' @rdname rtn_periods_andrew
+#' @param roll default is \code{FALSE},if \code{TRUE}, param \code{freq} can only be one of \code{year},\code{month} and \code{quarter}.
+#' @param nwin if roll is \code{TRUE}, nwin will be active.
+#' @export
+ggplot.rtn.periods <- function(rtn,freq="year",nwin=3,roll=FALSE){
+  
+  if(roll && !(freq %in% c("year","month","quarter"))){
+    stop('if roll is TRUE, freq must in c(year,month,quarter)!',call. = FALSE)
+  }
+  
+  if(roll){
+    main <- paste("roll",nwin,freq,'return',sep="_")
+  }else{
+    main <- paste(freq,'return',sep="_")
+  }
+  
+  if(roll){
+    rtn_result <- rtn.rollperiods(rtn,freq,nwin)
+  }else{
+    rtn_result <- rtn.periods(rtn,freq)
+  }
+  table.periods <- rtn.periods2df(rtn_result,melt = TRUE)
+  
+  ggplot(table.periods, aes(x=as.factor(endT), y=rtn, fill=variable)) +
+    geom_bar(position="dodge",stat="identity")+
+    ggtitle(main) +
+    theme(legend.title=element_blank())+theme(axis.text.x  = element_text(angle=90,vjust = 0.5))
+}
+
+#' rtn.periods2df
+#'
+#' \code{rtn.periods2df} turn rtn.periods' result into data.frame.
+#' @name rtn_periods_andrew
+#' @rdname rtn_periods_andrew
+#' @seealso [QUtility::rtn.periods()].
+#' @export
+rtn.periods2df <- function(rtn_result,melt = FALSE){
+  nperiod <- nrow(rtn_result)-2
+  table.periods <- rtn_result[1:nperiod,]
+  table.periods <- data.frame(date_range=rownames(table.periods),table.periods,row.names = NULL)
+  
+  table.periods <- table.periods %>% tidyr::separate(date_range,c('begT','endT'),sep=' ~ ') %>%
+    dplyr::mutate(begT=as.Date(begT),endT=as.Date(endT))
+  if(melt){
+    table.periods <- table.periods %>% tidyr::gather(key='variable',value='rtn',-begT,-endT) %>%
+      dplyr::arrange(variable,endT,begT)
+  }
+  return(table.periods)
+}
+
+#' rtn.rollperiods
+#'
+#' \code{rtn.rollperiods} calculate rolling.periods' result into data.frame.
+#' @rdname rtn_periods_andrew
+#' @export
+rtn.rollperiods <- function(rtn,freq=c("year","month","quarter"),nwin=3){
+  rtn_result <- rtn.periods(rtn,freq)
+  table.periods <- rtn.periods2df(rtn_result,melt = TRUE)
+  
+  #get roll rtn
+  table.periods <- table.periods %>% dplyr::group_by(variable) %>%
+    dplyr::mutate(begT=lag(begT,nwin-1),cumrtn=RcppRoll::roll_prodr(1+rtn,n=nwin)-1) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-rtn) %>% dplyr::filter(!is.na(cumrtn)) %>%
+    tidyr::spread(key='variable',value='cumrtn')
+  
+  names <- paste(table.periods$begT,table.periods$endT,sep=" ~ ")
+  
+  re <- as.matrix(table.periods[,c(-1,-2)])
+  rownames(re) <- names
+  
+  table.overall <- PerformanceAnalytics::Return.cumulative(rtn)
+  table.annual <- Return.annualized(rtn)
+  re <- rbind(re,table.overall,table.annual)
+  return(re)
+}
 

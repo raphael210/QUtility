@@ -7,5 +7,6 @@
 #' @importFrom xts as.xts xts  
 #' @importFrom data.table data.table 
 #' @importFrom lubridate %m+% %m-%
+#' @importFrom dplyr %>%
 NULL
  
